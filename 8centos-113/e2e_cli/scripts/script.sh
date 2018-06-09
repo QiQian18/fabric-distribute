@@ -1,7 +1,7 @@
 #!/bin/bash
 # Copyright London Stock Exchange Group All Rights Reserved.
 #
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: Apache-$VERSION
 #
 echo
 echo " ____    _____      _      ____    _____           _____   ____    _____ "
@@ -14,6 +14,8 @@ echo
 CHANNEL_NAME="$1"
 : ${CHANNEL_NAME:="mychannel"}
 : ${TIMEOUT:="60"}
+CHAINCODE="$2"
+VERSION="$3"
 COUNTER=1
 MAX_RETRY=5
 ORDERER_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/ordererOrganizations/lychee.com/orderers/orderer2.lychee.com/msp/tlscacerts/tlsca.lychee.com-cert.pem
@@ -123,7 +125,7 @@ joinChannel () {
 installChaincode () {
 	PEER=$1
 	setGlobals $PEER
-	peer chaincode install -n mycc -v 1.1 -p github.com/hyperledger/fabric/lychees/chaincode/go >&log.txt
+	peer chaincode install -n $CHAINCODE -v $VERSION -p github.com/hyperledger/fabric/lychees/chaincode/go >&log.txt
 	res=$?
 	cat log.txt
         verifyResult $res "Chaincode installation on remote peer PEER$PEER has Failed"
@@ -137,60 +139,15 @@ instantiateChaincode () {
 	# while 'peer chaincode' command can get the orderer endpoint from the peer (if join was successful),
 	# lets supply it directly as we know it using the "-o" option
 	if [ -z "$CORE_PEER_TLS_ENABLED" -o "$CORE_PEER_TLS_ENABLED" = "false" ]; then
-	peer chaincode instantiate -o orderer2.lychee.com:7050 --tls $CORE_PEER_TLS_ENABLED --cafile /opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/ordererOrganizations/lychee.com/orderers/orderer2.lychee.com/msp/tlscacerts/tlsca.lychee.com-cert.pem -C mychannel -n mycc -c '{"Args": []}' -v 1.1 -P "OR ('Org1MSP.member','Org2MSP.member')" >&log.txt
+	    peer chaincode instantiate -o orderer2.lychee.com:7050 --tls $CORE_PEER_TLS_ENABLED --cafile /opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/ordererOrganizations/lychee.com/orderers/orderer2.lychee.com/msp/tlscacerts/tlsca.lychee.com-cert.pem -C mychannel -n $CHAINCODE -c '{"Args": []}' -v $VERSION -P "OR ('Org1MSP.member','Org2MSP.member')" >&log.txt
 	else
-		peer chaincode instantiate -o orderer2.lychee.com:7050 --tls $CORE_PEER_TLS_ENABLED --cafile $ORDERER_CA -C $CHANNEL_NAME -n mycc -v 1.1 -c '{"Args": []}' -P "OR	('Org1MSP.member','Org2MSP.member')"  >&log.txt
+		peer chaincode instantiate -o orderer2.lychee.com:7050 --tls $CORE_PEER_TLS_ENABLED --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CHAINCODE -v $VERSION -c '{"Args": []}' -P "OR	('Org1MSP.member','Org2MSP.member')"  >&log.txt
+		
 	fi
 	res=$?
 	cat log.txt
 	verifyResult $res "Chaincode instantiation on PEER$PEER on channel '$CHANNEL_NAME' failed"
 	echo "===================== Chaincode Instantiation on PEER$PEER on channel '$CHANNEL_NAME' is successful ===================== "
-	echo
-}
-
-chaincodeQuery () {
-  PEER=$1
-  echo "===================== Querying on PEER$PEER on channel '$CHANNEL_NAME'... ===================== "
-  setGlobals $PEER
-  local rc=1
-  local starttime=$(date +%s)
-
-  # continue to poll
-  # we either get a successful response, or reach TIMEOUT
-  while test "$(($(date +%s)-starttime))" -lt "$TIMEOUT" -a $rc -ne 0
-  do
-     sleep 3
-     echo "Attempting to Query PEER$PEER ...$(($(date +%s)-starttime)) secs"
-     peer chaincode query -C $CHANNEL_NAME -n mycc -c '{"Args":["query","a"]}' >&log.txt
-     test $? -eq 0 && VALUE=$(cat log.txt | awk '/Query Result/ {print $NF}')
-     test "$VALUE" = "$2" && let rc=0
-  done
-  echo
-  cat log.txt
-  if test $rc -eq 0 ; then
-	echo "===================== Query on PEER$PEER on channel '$CHANNEL_NAME' is successful ===================== "
-  else
-	echo "!!!!!!!!!!!!!!! Query result on PEER$PEER is INVALID !!!!!!!!!!!!!!!!"
-        echo "================== ERROR !!! FAILED to execute End-2-End Scenario =================="
-	echo
-	exit 1
-  fi
-}
-
-chaincodeInvoke () {
-	PEER=$1
-	setGlobals $PEER
-	# while 'peer chaincode' command can get the orderer endpoint from the peer (if join was successful),
-	# lets supply it directly as we know it using the "-o" option
-	if [ -z "$CORE_PEER_TLS_ENABLED" -o "$CORE_PEER_TLS_ENABLED" = "false" ]; then
-		peer chaincode invoke -o orderer2.lychee.com:7050 -C $CHANNEL_NAME -n mycc -c '{"Args":["invoke","a","b","10"]}' >&log.txt
-	else
-		peer chaincode invoke -o orderer2.lychee.com:7050  --tls $CORE_PEER_TLS_ENABLED --cafile $ORDERER_CA -C $CHANNEL_NAME -n mycc -c '{"Args":["invoke","a","b","10"]}' >&log.txt
-	fi
-	res=$?
-	cat log.txt
-	verifyResult $res "Invoke execution on PEER$PEER failed "
-	echo "===================== Invoke transaction on PEER$PEER on channel '$CHANNEL_NAME' is successful ===================== "
 	echo
 }
 
@@ -223,21 +180,6 @@ installChaincode 7
 echo "Instantiating chaincode on org2/peer2..."
 instantiateChaincode 5
 
-#Query on chaincode on Peer0/Org1
-echo "Querying chaincode on org1/peer0..."
-#chaincodeQuery 0 100
-
-#Invoke on chaincode on Peer0/Org1
-echo "Sending invoke transaction on org1/peer0..."
-#chaincodeInvoke 0
-
-## Install chaincode on Peer3/Org2
-echo "Installing chaincode on org2/peer3..."
-#installChaincode 3
-
-#Query on chaincode on Peer3/Org2, check if the result is 90
-echo "Querying chaincode on org2/peer3..."
-#chaincodeQuery 3 90
 
 echo
 echo "===================== All GOOD, End-2-End execution completed ===================== "
