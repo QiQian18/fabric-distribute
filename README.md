@@ -1,7 +1,7 @@
 # fabric-distribute
 3orderer+3kafka+2org+8peer+1channel
 
-正确的脚本启动命令在centos-113中。可以将其复制到其他机器上。
+正确的脚本启动命令在centos-113中。可以将其复制到其他机器上。\n
 网络启动之后:
 docker exec -it lycheecli bash 
 chmod +x ./scripts/*.sh
